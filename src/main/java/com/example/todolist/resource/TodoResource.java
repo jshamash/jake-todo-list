@@ -26,6 +26,7 @@ import org.apache.http.message.BasicNameValuePair;
 
 import com.example.todolist.model.TodoItem;
 import com.mongodb.MongoException;
+import com.owlike.genson.stream.JsonReader;
 //import com.owlike.genson.stream.JsonReader;
 //import com.sun.jersey.api.client.Client;
 //import com.sun.jersey.api.client.ClientResponse;
@@ -127,6 +128,13 @@ public class TodoResource {
 		return Response.noContent().build();
 	}
 	
+	/**
+	 * Updates an item given its id
+	 * @param uriInfo
+	 * @param id The path parameter specifying the ID
+	 * @param item The JSON item
+	 * @return See Other if successful, Not Modified if no such item.
+	 */
 	@POST
 	@Path("{id}")
 	@Consumes(MediaType.APPLICATION_JSON)
@@ -185,6 +193,12 @@ public class TodoResource {
 		return Response.noContent().build();
 	}
 	
+	/**
+	 * {endpoint}/todo/search?q={keyword}
+	 * This should search for items containg keyword. Not working due to issues with the Jersey client dependency.
+	 * @param query The keyword
+	 * @return The list of items found in order of relevance (null, for now).
+	 */
 	@Path("search")
 	@GET
 	public List<TodoItem> search(@QueryParam("q") String query) {
@@ -198,31 +212,38 @@ public class TodoResource {
 		return null;
 	}
 	
-//	private static List<TodoItem> readItems(JsonReader reader) {
-//		LinkedList<TodoItem> items = new LinkedList<TodoItem>();
-//		while(reader.hasNext()) {
-//			String name = reader.next().name();
-//			if (name.contains("hits")) {
-//				// Outer "hits" object
-//				while(reader.hasNext()) {
-//					name = reader.next().name();
-//					if (name.contains("hits")) {
-//						// Inner "hits" object
-//						while (reader.hasNext()) {
-//							String body = "", title = "", id = "";
-//							boolean done = false;
-//							name = reader.next().name();
-//							if (name.contains("id")) id = reader.next().name();
-//							else if (name.contains("body")) body = reader.next().name();
-//							else if (name.contains("title")) title = reader.next().name();
-//							else if (name.contains("done")) done = Boolean.parseBoolean(reader.next().name());
-//							items.add(new TodoItem(id, title, body, done));
-//						}
-//					}
-//				}
-//			}
-//		}
-//		return items;
-//	}
+	/**
+	 * A method for parsing the JSON returned by a Searchly request into a list of items.
+	 * 
+	 * @param reader A JsonReader for the JSON
+	 * @return A list of items found.
+	 */
+	//Ugly, but arguably a nicer implementation than creating POJOs for each nested object in the JSON.
+	private static List<TodoItem> readItems(JsonReader reader) {
+		LinkedList<TodoItem> items = new LinkedList<TodoItem>();
+		while(reader.hasNext()) {
+			String name = reader.next().name();
+			if (name.contains("hits")) {
+				// Outer "hits" object
+				while(reader.hasNext()) {
+					name = reader.next().name();
+					if (name.contains("hits")) {
+						// Inner "hits" object
+						while (reader.hasNext()) {
+							String body = "", title = "", id = "";
+							boolean done = false;
+							name = reader.next().name();
+							if (name.contains("id")) id = reader.next().name();
+							else if (name.contains("body")) body = reader.next().name();
+							else if (name.contains("title")) title = reader.next().name();
+							else if (name.contains("done")) done = Boolean.parseBoolean(reader.next().name());
+							items.add(new TodoItem(id, title, body, done));
+						}
+					}
+				}
+			}
+		}
+		return items;
+	}
 	
 }

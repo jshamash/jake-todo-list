@@ -20,6 +20,11 @@ import com.mongodb.MongoException;
 import com.mongodb.MongoURI;
 import com.mongodb.WriteResult;
 
+/**
+ * A singleton class. Provides functionality for interacting with the Mongo database.
+ * @author Jake
+ *
+ */
 public class MongoService {
 	private static MongoService instance = null;
 	private static final String COLLECTION_NAME = "todoItems";
@@ -59,6 +64,12 @@ public class MongoService {
 	}
 	
 
+	/**
+	 * Insert an item into the collection
+	 * @param item
+	 * @return The id of the newly inserted item
+	 * @throws MongoException
+	 */
 	public String insertItem(TodoItem item) throws MongoException {
 		BasicDBObject doc = convert(item);
 		todoItems.insert(doc);
@@ -66,6 +77,12 @@ public class MongoService {
 	}
 	
 
+	/**
+	 * Get an item by id
+	 * @param id
+	 * @return The item
+	 * @throws MongoException
+	 */
 	public TodoItem getItem(String id) throws MongoException {
 		BasicDBObject query = new BasicDBObject();
 		query.put("_id", new ObjectId(id));
@@ -74,6 +91,11 @@ public class MongoService {
 		return convert(dbObj);
 	}
 	
+	/**
+	 * Gets all items from the collection
+	 * @return a list of the items
+	 * @throws MongoException
+	 */
 	public List<TodoItem> getItems() throws MongoException {
 		List<TodoItem> items = new LinkedList<TodoItem>();
 		DBCursor cursor = todoItems.find();
@@ -84,16 +106,31 @@ public class MongoService {
 		return items;
 	}
 	
+	/**
+	 * Deletes an item by ID
+	 * @param id
+	 * @throws MongoException
+	 */
 	public void deleteItem(String id) throws MongoException {
 		BasicDBObject query = new BasicDBObject();
 		query.put("_id", new ObjectId(id));
 		todoItems.remove(query);
 	}
 	
+	/**
+	 * Deletes all items in the collection
+	 */
 	public void deleteItems() {
 		todoItems.remove(new BasicDBObject());
 	}
 	
+	/**
+	 * Update item with id to newItem
+	 * @param id
+	 * @param newItem
+	 * @return true if the item exists, false otherwise.
+	 * @throws MongoException
+	 */
 	public boolean updateItem(String id, TodoItem newItem) throws MongoException {
 		BasicDBObject newObject = convert(newItem);
 		BasicDBObject query = new BasicDBObject();
