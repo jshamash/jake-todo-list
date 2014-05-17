@@ -13,6 +13,7 @@ There are, however, some features of this application that are incomplete due to
 * There are no unit tests
 * There is no simple UI for making API calls, testing must be done instead using curl or some other client.
 * New entries in the DB aren't pushed to Searchly as they're added. Instead, Searchly crawls the database weekly. As such search requests (if they were working) don't search freshly added data. This is simple to fix by adding to the Searchly index via an API call whenever a database entry is added/changed.
+* A better practice for configuration settings is to have a config file and read the properties from there -- using constants is not as nice.
 
 ## API
 Base url: http://jake-todo-list.herokuapp.com/
