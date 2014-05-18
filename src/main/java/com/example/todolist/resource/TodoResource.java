@@ -4,7 +4,12 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
+import javax.net.ssl.SSLContext;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DELETE;
 import javax.ws.rs.GET;
@@ -15,6 +20,10 @@ import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.WebApplicationException;
+import javax.ws.rs.client.Client;
+import javax.ws.rs.client.ClientBuilder;
+import javax.ws.rs.client.Entity;
+import javax.ws.rs.client.WebTarget;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
@@ -23,20 +32,25 @@ import javax.ws.rs.core.UriInfo;
 
 import org.apache.http.NameValuePair;
 import org.apache.http.message.BasicNameValuePair;
+import org.glassfish.jersey.SslConfigurator;
+import org.glassfish.jersey.client.authentication.HttpAuthenticationFeature;
 
+import com.example.todolist.model.SearchlyHit;
+import com.example.todolist.model.SearchlyResult;
 import com.example.todolist.model.TodoItem;
 import com.mongodb.MongoException;
+import com.owlike.genson.Genson;
 import com.owlike.genson.stream.JsonReader;
-//import com.owlike.genson.stream.JsonReader;
-//import com.sun.jersey.api.client.Client;
-//import com.sun.jersey.api.client.ClientResponse;
-//import com.sun.jersey.api.client.WebResource;
 import com.twilio.sdk.TwilioRestClient;
 import com.twilio.sdk.TwilioRestException;
 import com.twilio.sdk.resource.factory.MessageFactory;
 import com.twilio.sdk.resource.instance.Message;
 
 import datastore.MongoService;
+//import com.owlike.genson.stream.JsonReader;
+//import com.sun.jersey.api.client.Client;
+//import com.sun.jersey.api.client.ClientResponse;
+//import com.sun.jersey.api.client.WebResource;
 
 @Path("todo")
 public class TodoResource {
@@ -47,11 +61,14 @@ public class TodoResource {
 	private static final String DEST_NUMBER = "+15148652279";
 	private static final String SRC_NUMBER = "+14387938511";
 	private static final String SEARCHLY_ENDPOINT =
-			"https://todolist:bdcsprj9vle4qmtlauzvu4ozduu4sptf@dwalin-us-east-1.searchly.com/todolist/_search";
+			"http://dwalin-us-east-1.searchly.com/todolist/_search";
+	private static final String SEARCHLY_USER = "todolist";
+	private static final String SEARCHLY_PASS = "bdcsprj9vle4qmtlauzvu4ozduu4sptf";
+	// String for elasticsearch query, where $query is to be replaced by the client's query.
 	private static final String ES_JSON =
 			"{ \"query\": { \"bool\": { \"should\": [ {\"match\": { \"title\":" +
-			"{ \"query\": $query, \"boost\": 2 } }}, { \"match\": {\"body\" : $query}}" +
-			"]}}}";
+			"{ \"query\": \"$query\", \"boost\": 2 } }}, { \"match\": {\"body\" : \"$query\"}}" +
+			"], \"minimum_should_match\" : 1}}}";
 	
 	/**
 	 * Method handling GET request with specified ID. Returns the item with this id.
@@ -159,6 +176,13 @@ public class TodoResource {
 		}
 	}
 	
+	/**
+	 * Toggles the "done" status of the todo item with the given id. When a todo
+	 * item is marked done, the user is notified by SMS.
+	 * 
+	 * @param id The ID of the todo item.
+	 * @return No Content response code if successful.
+	 */
 	@PUT
 	@Path("{id}/toggledone")
 	public Response toggleDone(@PathParam("id") String id) {
@@ -185,7 +209,7 @@ public class TodoResource {
 			    MessageFactory messageFactory = client.getAccount().getMessageFactory();
 			    Message message = messageFactory.create(params);
 		    } catch (TwilioRestException ex) {
-		    	// Handle silently -- the message won't send, but we won't report an error.
+		    	// Handle silently -- the SMS won't send, but we won't report an error.
 		    }
 		}
 		
@@ -194,56 +218,48 @@ public class TodoResource {
 	}
 	
 	/**
-	 * {endpoint}/todo/search?q={keyword}
-	 * This should search for items containg keyword. Not working due to issues with the Jersey client dependency.
+	 * {endpoint}/todo/search?q={keyword} Searches for items containing keyword
+	 * using the ElasticSearch API (via Searchly.io). Items with the keyword in
+	 * their title are given higher weight than items with the keyword in their
+	 * body.
+	 * 
 	 * @param query The keyword
-	 * @return The list of items found in order of relevance (null, for now).
+	 * @return The list of items found in order of relevance.
 	 */
 	@Path("search")
+	@Produces(MediaType.APPLICATION_JSON)
 	@GET
 	public List<TodoItem> search(@QueryParam("q") String query) {
-//		Client client = Client.create();
-//		WebResource res = client.resource(SEARCHLY_ENDPOINT);
-//		// Do a find and replace in the ElasticSearch query string
-//		String json = ES_JSON.replaceAll("\\$query", query);
-//		ClientResponse response = res.type(MediaType.APPLICATION_JSON).post(ClientResponse.class, json);
-//		List<TodoItem> items = readItems(new JsonReader(response.getEntity(String.class)));
-//		return items;
-		return null;
-	}
-	
-	/**
-	 * A method for parsing the JSON returned by a Searchly request into a list of items.
-	 * 
-	 * @param reader A JsonReader for the JSON
-	 * @return A list of items found.
-	 */
-	//Ugly, but arguably a nicer implementation than creating POJOs for each nested object in the JSON.
-	private static List<TodoItem> readItems(JsonReader reader) {
-		LinkedList<TodoItem> items = new LinkedList<TodoItem>();
-		while(reader.hasNext()) {
-			String name = reader.next().name();
-			if (name.contains("hits")) {
-				// Outer "hits" object
-				while(reader.hasNext()) {
-					name = reader.next().name();
-					if (name.contains("hits")) {
-						// Inner "hits" object
-						while (reader.hasNext()) {
-							String body = "", title = "", id = "";
-							boolean done = false;
-							name = reader.next().name();
-							if (name.contains("id")) id = reader.next().name();
-							else if (name.contains("body")) body = reader.next().name();
-							else if (name.contains("title")) title = reader.next().name();
-							else if (name.contains("done")) done = Boolean.parseBoolean(reader.next().name());
-							items.add(new TodoItem(id, title, body, done));
-						}
-					}
-				}
-			}
+		
+		if (query == null) {
+			throw new WebApplicationException(Status.BAD_REQUEST);
 		}
-		return items;
-	}
-	
+
+		HttpAuthenticationFeature feature = HttpAuthenticationFeature.basic(SEARCHLY_USER, SEARCHLY_PASS);
+		Client client = ClientBuilder.newClient();
+		client.register(feature);
+
+		// request
+		WebTarget target = client.target(SEARCHLY_ENDPOINT);
+		String json = ES_JSON.replaceAll("\\$query", query);
+		Future<Response> future = target.request().async().post(Entity.entity(json, MediaType.APPLICATION_JSON));
+		
+		try {
+			// Wait 5 seconds for future to complete
+			Response response = future.get(5, TimeUnit.SECONDS);
+			SearchlyResult result = response.readEntity(SearchlyResult.class);
+			LinkedList<TodoItem> list = new LinkedList<TodoItem>();
+			// Add all the search results to the list (they are in order of relevance)
+			for (SearchlyHit hit : result.getSearchlyHits().getSearchlyHitList()) {
+				list.add(hit.get_source());
+			}
+			return list;
+		} catch (InterruptedException e) {
+			throw new WebApplicationException(Status.INTERNAL_SERVER_ERROR);
+		} catch (ExecutionException e) {
+			throw new WebApplicationException(Status.INTERNAL_SERVER_ERROR);
+		} catch (TimeoutException e) {
+			throw new WebApplicationException(Status.GATEWAY_TIMEOUT);
+		}
+	}	
 }

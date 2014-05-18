@@ -46,14 +46,10 @@ public class MongoService {
 	
 	private void connect() {
     	try {
-    		System.out.println("Trying to connect to mongo....");
-    		
 			MongoURI mongoURI = new MongoURI(System.getenv("MONGOHQ_URL"));
 			db = mongoURI.connectDB();
 			db.authenticate(mongoURI.getUsername(), mongoURI.getPassword());
 			todoItems = db.getCollection(COLLECTION_NAME);
-			
-			System.out.println("Connected to Mongo");
 		} catch (MongoException e) {
 			// Could not authenticate -- 502 bad gateway (not client's fault)
 			throw new WebApplicationException(Status.BAD_GATEWAY);

@@ -5,21 +5,21 @@ package com.example.todolist.model;
  * @author Jake Shamash
  */
 public class TodoItem {
-	private String id;
+	private String _id;
 	private String title;
 	private String body;
 	private boolean done;
 	
 	public TodoItem(String title, String body, boolean done) {
 		super();
-		this.id = "";
+		this._id = "";
 		this.title = title;
 		this.body = body;
 		this.done = done;
 	}
-	public TodoItem(String id, String title, String body, boolean done) {
+	public TodoItem(String _id, String title, String body, boolean done) {
 		super();
-		this.id = id;
+		this._id = _id;
 		this.title = title;
 		this.body = body;
 		this.done = done;
@@ -76,13 +76,13 @@ public class TodoItem {
 	/**
 	 * @return the id
 	 */
-	public String getId() {
-		return id;
+	public String get_id() {
+		return _id;
 	}
 	/**
 	 * @param id the id to set
 	 */
-	public void setId(String id) {
-		this.id = id;
+	public void set_id(String _id) {
+		this._id = _id;
 	}
 }
