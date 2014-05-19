@@ -1,7 +1,5 @@
 package service;
 
-import java.util.NoSuchElementException;
-
 import com.example.todolist.model.TodoItem;
 import com.mongodb.MongoException;
 

@@ -3,10 +3,12 @@ package service;
 import java.net.URI;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.logging.Logger;
 
 import javax.ws.rs.client.Client;
 import javax.ws.rs.client.ClientBuilder;
@@ -32,20 +34,34 @@ import com.example.todolist.model.TodoItem;
  * 
  */
 public class ElasticSearchService implements DataWritingService {
-	private static final String SEARCHLY_ENDPOINT =
-			"http://dwalin-us-east-1.searchly.com/";
-	private static final String INDEX_NAME = "todolist";
-	private static final String INDEX_TYPE = "todoitem";
-	private static final String SEARCHLY_USER = "todolist";
-	private static final String SEARCHLY_PASS = "bdcsprj9vle4qmtlauzvu4ozduu4sptf";
 	// String for elasticsearch query, where $query is to be replaced by the client's query.
-	// TODO move to json file
 	private static final String ES_JSON =
-			"{ \"query\": { \"bool\": { \"should\": [ {\"match\": { \"title\":" +
-			"{ \"query\": \"$query\", \"boost\": 2 } }}, { \"match\": {\"body\" : \"$query\"}}" +
-			"], \"minimum_should_match\" : 1}}}";
+			"{ \"query\": {" +
+			"		\"bool\": {" +
+			"			\"should\": [" +
+			"				{\"match\": {" +
+			"					\"title\": {" +
+			"						\"query\": \"$query\"," +
+			"						\"boost\": 2" +
+			"					}" +
+			"					}}," +
+			"				{\"match\": {" +
+			"					\"body\" : \"$query\"" +
+			"				}}" +
+			"			]," +
+			"			\"minimum_should_match\" : 1}" +
+			"		}" +
+			"}";
+	
+	private final static Logger LOGGER = Logger.getLogger(ElasticSearchService.class.getName()); 
 	
 	private static ElasticSearchService instance = null;
+	
+	private String searchlyEndpoint = "";
+	private String indexName = "";
+	private String indexType = "";
+	private String searchlyUser = "";
+	private String searchlyPassword = "";
 	
 	private Client client;
 	
@@ -53,6 +69,22 @@ public class ElasticSearchService implements DataWritingService {
 		if (instance != null) {
 			throw new IllegalStateException("Already instantiated!");
 		}
+		Properties properties = new Properties();
+		try {
+			properties.load(Thread.currentThread().getContextClassLoader().getResourceAsStream("config.properties"));
+			searchlyEndpoint = properties.getProperty("searchly_endpoint");
+			indexName = properties.getProperty("searchly_index_name");
+			indexType = properties.getProperty("searchly_index_type");
+			searchlyUser = properties.getProperty("searchly_user");
+			searchlyPassword = properties.getProperty("searchly_password");			
+		} catch (Exception e) {
+			LOGGER.warning("No config.properties file found, using defaults");
+		}
+		LOGGER.info("Set searchly endpoint to " + searchlyEndpoint);
+		LOGGER.info("Set searchly index name to " + indexName);
+		LOGGER.info("Set searchly index type to " + indexType);
+		LOGGER.info("Set searchly username to " + searchlyUser);
+		LOGGER.info("Set searchly password to " + searchlyPassword);
 		connect();
 	}
 	
@@ -63,16 +95,16 @@ public class ElasticSearchService implements DataWritingService {
 	}
 	
 	private void connect() {
-		HttpAuthenticationFeature feature = HttpAuthenticationFeature.basic(SEARCHLY_USER, SEARCHLY_PASS);
+		HttpAuthenticationFeature feature = HttpAuthenticationFeature.basic(searchlyUser, searchlyPassword);
 		client = ClientBuilder.newClient();
 		client.register(feature);
 	}
 	
 	@Override
 	public String insertItem(TodoItem item) {
-		URI uri = UriBuilder.fromPath(SEARCHLY_ENDPOINT)
-				.path(INDEX_NAME)
-				.path(INDEX_TYPE)
+		URI uri = UriBuilder.fromPath(searchlyEndpoint)
+				.path(indexName)
+				.path(indexType)
 				.path(item.get_id())
 				.build();
 		WebTarget target = client.target(uri);
@@ -91,9 +123,9 @@ public class ElasticSearchService implements DataWritingService {
 
 	@Override
 	public void deleteItem(String id) {
-		URI uri = UriBuilder.fromPath(SEARCHLY_ENDPOINT)
-				.path(INDEX_NAME)
-				.path(INDEX_TYPE)
+		URI uri = UriBuilder.fromPath(searchlyEndpoint)
+				.path(indexName)
+				.path(indexType)
 				.path(id)
 				.build();
 		WebTarget target = client.target(uri);
@@ -102,9 +134,9 @@ public class ElasticSearchService implements DataWritingService {
 
 	@Override
 	public void deleteItems() {
-		URI uri = UriBuilder.fromPath(SEARCHLY_ENDPOINT)
-				.path(INDEX_NAME)
-				.path(INDEX_TYPE)
+		URI uri = UriBuilder.fromPath(searchlyEndpoint)
+				.path(indexName)
+				.path(indexType)
 				.build();
 		WebTarget target = client.target(uri);
 		target.request().async().delete();
@@ -119,9 +151,21 @@ public class ElasticSearchService implements DataWritingService {
 		return true;
 	}
 	
+	/**
+	 * Searches all items via ElasticSearch for the given query. Returns a list
+	 * of items containing the query in their title or body. The items are
+	 * ordered in terms of their score, and items that match in their title
+	 * score higher than items that match in their body.
+	 * 
+	 * @param query The search query
+	 * @return A list of matching items in order of relevance
+	 * @throws InterruptedException
+	 * @throws ExecutionException
+	 * @throws TimeoutException
+	 */
 	public List<TodoItem> search(String query) throws InterruptedException, ExecutionException, TimeoutException {
-		URI uri = UriBuilder.fromPath(SEARCHLY_ENDPOINT)
-				.path(INDEX_NAME)
+		URI uri = UriBuilder.fromPath(searchlyEndpoint)
+				.path(indexName)
 				.path("_search")
 				.build();
 		WebTarget target = client.target(uri);

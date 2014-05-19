@@ -2,6 +2,8 @@ package service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
+import java.util.logging.Logger;
 
 import org.apache.http.NameValuePair;
 import org.apache.http.message.BasicNameValuePair;
@@ -15,11 +17,12 @@ import com.twilio.sdk.resource.factory.MessageFactory;
  * @author Jake Shamash
  */
 public class TwilioService {
-	// TODO move to config file
-	private static final String ACCOUNT_SID = "AC013d2d273f8193d60cb7654672f5aab0";
-	private static final String AUTH_TOKEN = "fd40f8ee74bd6ec026bead17925d5c5d";
-	private static final String DEST_NUMBER = "+15148652279";
-	private static final String SRC_NUMBER = "+14387938511";
+	private String accountSID = "";
+	private String authToken = "";
+	private String destNumber = "+15555555555";
+	private String srcNumber = "+15555555555";
+	
+	private final static Logger LOGGER = Logger.getLogger(TwilioService.class.getName()); 
 		
 	private static TwilioService instance = null;
 	private TwilioRestClient client;
@@ -28,7 +31,22 @@ public class TwilioService {
 		if (instance != null) {
 			throw new IllegalStateException("Already instantiated!");
 		}
-		client = new TwilioRestClient(ACCOUNT_SID, AUTH_TOKEN);
+		
+		try {
+			Properties properties = new Properties();
+			properties.load(Thread.currentThread().getContextClassLoader().getResourceAsStream("config.properties"));
+			accountSID = properties.getProperty("twilio_account_ssid");
+			authToken = properties.getProperty("twilio_auth_token");
+			destNumber = properties.getProperty("twilio_dest_number");
+			srcNumber = properties.getProperty("twilio_src_number");
+		} catch (Exception e) {
+			LOGGER.warning("No config.properties file found, using defaults");
+		}
+		LOGGER.info("Set Twilio account SID to " + accountSID);
+		LOGGER.info("Set Twilio authentication token to " + authToken);
+		LOGGER.info("Set Twilio destination phone number to " + destNumber);
+		LOGGER.info("Set Twilio source phone number to " + srcNumber);
+		client = new TwilioRestClient(accountSID, authToken);
 	}
 
 	public static TwilioService getInstance() {
@@ -45,8 +63,8 @@ public class TwilioService {
 		// Build a filter for the MessageList
 	    List<NameValuePair> params = new ArrayList<NameValuePair>();
 	    params.add(new BasicNameValuePair("Body", message));
-	    params.add(new BasicNameValuePair("To", DEST_NUMBER));
-	    params.add(new BasicNameValuePair("From", SRC_NUMBER));	     
+	    params.add(new BasicNameValuePair("To", destNumber));
+	    params.add(new BasicNameValuePair("From", srcNumber));	     
 	     
 	    try {
 		    MessageFactory messageFactory = client.getAccount().getMessageFactory();

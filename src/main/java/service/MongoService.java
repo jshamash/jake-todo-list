@@ -3,6 +3,8 @@ package service;
 import java.net.UnknownHostException;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Properties;
+import java.util.logging.Logger;
 
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Response.Status;
@@ -26,7 +28,8 @@ import com.mongodb.WriteResult;
  */
 public class MongoService implements DataWritingService, DataReadingService {
 	private static MongoService instance = null;
-	private static final String COLLECTION_NAME = "todoItems";
+	private String collectionName;
+	private final static Logger LOGGER = Logger.getLogger(MongoService.class.getName()); 
 	DB db;
 	DBCollection todoItems;
 	
@@ -34,6 +37,16 @@ public class MongoService implements DataWritingService, DataReadingService {
 		if (instance != null) {
 			throw new IllegalStateException("Already instantiated!");
 		}
+		Properties properties = new Properties();
+		try {
+			properties.load(Thread.currentThread().getContextClassLoader().getResourceAsStream("config.properties"));
+			collectionName = properties.getProperty("mongo_collection_name");
+		} catch (Exception e) {
+			LOGGER.warning("No config.properties file found, using defaults");
+			collectionName = "todoitems";
+		}
+		LOGGER.info("Set mongo collection name to " + collectionName);
+		LOGGER.info("Connecting to Mongo Service...");
 		connect();
 	}
 	
@@ -48,7 +61,8 @@ public class MongoService implements DataWritingService, DataReadingService {
 			MongoURI mongoURI = new MongoURI(System.getenv("MONGOHQ_URL"));
 			db = mongoURI.connectDB();
 			db.authenticate(mongoURI.getUsername(), mongoURI.getPassword());
-			todoItems = db.getCollection(COLLECTION_NAME);
+			todoItems = db.getCollection(collectionName);
+			LOGGER.info("Connected to Mongo Service");
 		} catch (MongoException e) {
 			// Could not authenticate -- 502 bad gateway (not client's fault)
 			throw new WebApplicationException(Status.BAD_GATEWAY);
@@ -132,11 +146,10 @@ public class MongoService implements DataWritingService, DataReadingService {
 		boolean done = Boolean.parseBoolean(obj.get("done").toString());
 		return new TodoItem(id, title, body, done);
 	}
+	
 	private static BasicDBObject convert(TodoItem item) {
 		return new BasicDBObject("title", item.getTitle()).
 				append("body", item.getBody()).
 				append("done", item.isDone());
-	}
-
-	
+	}	
 }
