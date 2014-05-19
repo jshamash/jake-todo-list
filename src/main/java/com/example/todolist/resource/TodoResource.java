@@ -2,14 +2,10 @@ package com.example.todolist.resource;
 
 import java.net.URI;
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import javax.net.ssl.SSLContext;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DELETE;
 import javax.ws.rs.GET;
@@ -20,10 +16,6 @@ import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.WebApplicationException;
-import javax.ws.rs.client.Client;
-import javax.ws.rs.client.ClientBuilder;
-import javax.ws.rs.client.Entity;
-import javax.ws.rs.client.WebTarget;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
@@ -32,25 +24,16 @@ import javax.ws.rs.core.UriInfo;
 
 import org.apache.http.NameValuePair;
 import org.apache.http.message.BasicNameValuePair;
-import org.glassfish.jersey.SslConfigurator;
-import org.glassfish.jersey.client.authentication.HttpAuthenticationFeature;
 
-import com.example.todolist.model.SearchlyHit;
-import com.example.todolist.model.SearchlyResult;
+import service.ElasticSearchService;
+import service.MongoService;
+
 import com.example.todolist.model.TodoItem;
 import com.mongodb.MongoException;
-import com.owlike.genson.Genson;
-import com.owlike.genson.stream.JsonReader;
 import com.twilio.sdk.TwilioRestClient;
 import com.twilio.sdk.TwilioRestException;
 import com.twilio.sdk.resource.factory.MessageFactory;
-import com.twilio.sdk.resource.instance.Message;
 
-import datastore.MongoService;
-//import com.owlike.genson.stream.JsonReader;
-//import com.sun.jersey.api.client.Client;
-//import com.sun.jersey.api.client.ClientResponse;
-//import com.sun.jersey.api.client.WebResource;
 
 @Path("todo")
 public class TodoResource {
@@ -60,15 +43,7 @@ public class TodoResource {
 	private static final String AUTH_TOKEN = "fd40f8ee74bd6ec026bead17925d5c5d";
 	private static final String DEST_NUMBER = "+15148652279";
 	private static final String SRC_NUMBER = "+14387938511";
-	private static final String SEARCHLY_ENDPOINT =
-			"http://dwalin-us-east-1.searchly.com/todolist/_search";
-	private static final String SEARCHLY_USER = "todolist";
-	private static final String SEARCHLY_PASS = "bdcsprj9vle4qmtlauzvu4ozduu4sptf";
-	// String for elasticsearch query, where $query is to be replaced by the client's query.
-	private static final String ES_JSON =
-			"{ \"query\": { \"bool\": { \"should\": [ {\"match\": { \"title\":" +
-			"{ \"query\": \"$query\", \"boost\": 2 } }}, { \"match\": {\"body\" : \"$query\"}}" +
-			"], \"minimum_should_match\" : 1}}}";
+	
 	
 	/**
 	 * Method handling GET request with specified ID. Returns the item with this id.
@@ -111,6 +86,8 @@ public class TodoResource {
 	public Response saveItem(@Context UriInfo uriInfo, TodoItem item) {
 		try {
 			String id = MongoService.getInstance().insertItem(item);
+			item.set_id(id);
+			ElasticSearchService.getInstance().insertItem(item);
 			// URI of the created item
 			URI location = uriInfo.getBaseUriBuilder().path("todo/" + id).build();
 			return Response.created(location).build();
@@ -131,6 +108,7 @@ public class TodoResource {
 	@Path("{id}")
 	public Response deleteItemByID(@PathParam("id") String id) {
 		MongoService.getInstance().deleteItem(id);
+		ElasticSearchService.getInstance().deleteItem(id);
 		return Response.noContent().build();
 	}
 	
@@ -142,6 +120,7 @@ public class TodoResource {
 	@DELETE
 	public Response deleteAll() {
 		MongoService.getInstance().deleteItems();
+		ElasticSearchService.getInstance().deleteItems();
 		return Response.noContent().build();
 	}
 	
@@ -158,6 +137,9 @@ public class TodoResource {
 	public Response updateItem(@Context UriInfo uriInfo, @PathParam("id") String id, TodoItem item) {
 		try {
 			if (MongoService.getInstance().updateItem(id, item)) {
+				//Update ElasticSearch
+				ElasticSearchService.getInstance().updateItem(id, item);
+				
 				// URI of the updated item
 				URI location = uriInfo.getBaseUriBuilder().path("todo/" + id).build();
 				// Best practice is to use a "See Other" response code, to tell
@@ -207,7 +189,7 @@ public class TodoResource {
 		     
 		    try {
 			    MessageFactory messageFactory = client.getAccount().getMessageFactory();
-			    Message message = messageFactory.create(params);
+			    messageFactory.create(params);
 		    } catch (TwilioRestException ex) {
 		    	// Handle silently -- the SMS won't send, but we won't report an error.
 		    }
@@ -235,25 +217,8 @@ public class TodoResource {
 			throw new WebApplicationException(Status.BAD_REQUEST);
 		}
 
-		HttpAuthenticationFeature feature = HttpAuthenticationFeature.basic(SEARCHLY_USER, SEARCHLY_PASS);
-		Client client = ClientBuilder.newClient();
-		client.register(feature);
-
-		// request
-		WebTarget target = client.target(SEARCHLY_ENDPOINT);
-		String json = ES_JSON.replaceAll("\\$query", query);
-		Future<Response> future = target.request().async().post(Entity.entity(json, MediaType.APPLICATION_JSON));
-		
 		try {
-			// Wait 5 seconds for future to complete
-			Response response = future.get(5, TimeUnit.SECONDS);
-			SearchlyResult result = response.readEntity(SearchlyResult.class);
-			LinkedList<TodoItem> list = new LinkedList<TodoItem>();
-			// Add all the search results to the list (they are in order of relevance)
-			for (SearchlyHit hit : result.getSearchlyHits().getSearchlyHitList()) {
-				list.add(hit.get_source());
-			}
-			return list;
+			return ElasticSearchService.getInstance().search(query);
 		} catch (InterruptedException e) {
 			throw new WebApplicationException(Status.INTERNAL_SERVER_ERROR);
 		} catch (ExecutionException e) {

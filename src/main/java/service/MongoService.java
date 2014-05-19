@@ -1,4 +1,4 @@
-package datastore;
+package service;
 
 import java.net.UnknownHostException;
 import java.util.LinkedList;
@@ -25,7 +25,7 @@ import com.mongodb.WriteResult;
  * @author Jake
  *
  */
-public class MongoService {
+public class MongoService implements DataWritingService, DataReadingService {
 	private static MongoService instance = null;
 	private static final String COLLECTION_NAME = "todoItems";
 	DB db;
@@ -60,25 +60,20 @@ public class MongoService {
 	}
 	
 
-	/**
-	 * Insert an item into the collection
-	 * @param item
-	 * @return The id of the newly inserted item
-	 * @throws MongoException
+	/* (non-Javadoc)
+	 * @see datastore.DatastoreService#insertItem(com.example.todolist.model.TodoItem)
 	 */
+	@Override
 	public String insertItem(TodoItem item) throws MongoException {
 		BasicDBObject doc = convert(item);
 		todoItems.insert(doc);
 		return doc.get("_id").toString();
 	}
 	
-
-	/**
-	 * Get an item by id
-	 * @param id
-	 * @return The item
-	 * @throws MongoException
+	/* (non-Javadoc)
+	 * @see service.DataReadingService#getItem(java.lang.String)
 	 */
+	@Override
 	public TodoItem getItem(String id) throws MongoException {
 		BasicDBObject query = new BasicDBObject();
 		query.put("_id", new ObjectId(id));
@@ -87,11 +82,10 @@ public class MongoService {
 		return convert(dbObj);
 	}
 	
-	/**
-	 * Gets all items from the collection
-	 * @return a list of the items
-	 * @throws MongoException
+	/* (non-Javadoc)
+	 * @see service.DataReadingService#getItems()
 	 */
+	@Override
 	public List<TodoItem> getItems() throws MongoException {
 		List<TodoItem> items = new LinkedList<TodoItem>();
 		DBCursor cursor = todoItems.find();
@@ -102,49 +96,34 @@ public class MongoService {
 		return items;
 	}
 	
-	/**
-	 * Deletes an item by ID
-	 * @param id
-	 * @throws MongoException
+	/* (non-Javadoc)
+	 * @see datastore.DatastoreService#deleteItem(java.lang.String)
 	 */
+	@Override
 	public void deleteItem(String id) throws MongoException {
 		BasicDBObject query = new BasicDBObject();
 		query.put("_id", new ObjectId(id));
 		todoItems.remove(query);
 	}
 	
-	/**
-	 * Deletes all items in the collection
+	/* (non-Javadoc)
+	 * @see datastore.DatastoreService#deleteItems()
 	 */
+	@Override
 	public void deleteItems() {
 		todoItems.remove(new BasicDBObject());
 	}
 	
-	/**
-	 * Update item with id to newItem
-	 * @param id
-	 * @param newItem
-	 * @return true if the item exists, false otherwise.
-	 * @throws MongoException
+	/* (non-Javadoc)
+	 * @see datastore.DatastoreService#updateItem(java.lang.String, com.example.todolist.model.TodoItem)
 	 */
+	@Override
 	public boolean updateItem(String id, TodoItem newItem) throws MongoException {
 		BasicDBObject newObject = convert(newItem);
 		BasicDBObject query = new BasicDBObject();
 		query.put("_id", new ObjectId(id));
 		WriteResult result = todoItems.update(query, newObject);
 		return (result.getN() < 1) ? false : true;
-	}
-	
-	/**
-	 * Toggles the "done" field on the item with specified id.
-	 * @param id The ID of the item
-	 * @return The updated status of this item (true = done, false = not done)
-	 * @throws MongoException
-	 * @throws NoSuchElementException if the element doesn't exist
-	 */
-	public boolean toggleDone(String id) throws MongoException, NoSuchElementException {
-		
-		return false;
 	}
 	
 	private static TodoItem convert(DBObject obj) {
