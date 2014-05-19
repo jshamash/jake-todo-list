@@ -1,7 +1,6 @@
 package com.example.todolist.resource;
 
 import java.net.URI;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
@@ -22,28 +21,16 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.UriInfo;
 
-import org.apache.http.NameValuePair;
-import org.apache.http.message.BasicNameValuePair;
-
 import service.ElasticSearchService;
 import service.MongoService;
+import service.TwilioService;
 
 import com.example.todolist.model.TodoItem;
 import com.mongodb.MongoException;
-import com.twilio.sdk.TwilioRestClient;
-import com.twilio.sdk.TwilioRestException;
-import com.twilio.sdk.resource.factory.MessageFactory;
 
 
 @Path("todo")
-public class TodoResource {
-	
-	// TODO move to config file
-	private static final String ACCOUNT_SID = "AC013d2d273f8193d60cb7654672f5aab0";
-	private static final String AUTH_TOKEN = "fd40f8ee74bd6ec026bead17925d5c5d";
-	private static final String DEST_NUMBER = "+15148652279";
-	private static final String SRC_NUMBER = "+14387938511";
-	
+public class TodoResource {	
 	
 	/**
 	 * Method handling GET request with specified ID. Returns the item with this id.
@@ -176,23 +163,11 @@ public class TodoResource {
 		// Update the item
 		item.toggleDone();
 		MongoService.getInstance().updateItem(id, item);
+		ElasticSearchService.getInstance().updateItem(id, item);
 		
 		// If the item is done, send the user a text
 		if (item.isDone()) {
-			 TwilioRestClient client = new TwilioRestClient(ACCOUNT_SID, AUTH_TOKEN);
-			    
-		    // Build a filter for the MessageList
-		    List<NameValuePair> params = new ArrayList<NameValuePair>();
-		    params.add(new BasicNameValuePair("Body", "Item " + item.getTitle() + " has been marked done."));
-		    params.add(new BasicNameValuePair("To", DEST_NUMBER));
-		    params.add(new BasicNameValuePair("From", SRC_NUMBER));	     
-		     
-		    try {
-			    MessageFactory messageFactory = client.getAccount().getMessageFactory();
-			    messageFactory.create(params);
-		    } catch (TwilioRestException ex) {
-		    	// Handle silently -- the SMS won't send, but we won't report an error.
-		    }
+			 TwilioService.getInstance().sendMessage("Item " + item.getTitle() + " has been marked as done.");
 		}
 		
 		// The item has been updated, respond with no content

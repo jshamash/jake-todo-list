@@ -3,7 +3,6 @@ package service;
 import java.net.UnknownHostException;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.NoSuchElementException;
 
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Response.Status;
